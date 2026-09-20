@@ -539,26 +539,32 @@ class AIVideoGenerator {
       return videoPath;
     }
 
-    // Chain crossfades: transition k starts fade seconds before slide k ends
-    const filters = [];
-    let prev = '[0:v]';
-    for (let i = 1; i < stills.length; i++) {
-      const out = `[v${i}]`;
-      const offset = (i * (perSlide - fade)).toFixed(2);
-      filters.push(`${prev}[${i}:v]xfade=transition=fade:duration=${fade}:offset=${offset}${out}`);
-      prev = out;
+    // A single multi-input xfade filter_complex graph decodes every slide at
+    // once, which was crashing on memory-constrained hosts (e.g. Railway)
+    // with no usable error output. Render each slide to its own short clip
+    // with a fade in/out instead, then concatenate the clips: this keeps
+    // peak memory low (one input decoded at a time) and is far more robust.
+    const clipsDir = path.join(path.dirname(videoPath), `clips_${Date.now()}`);
+    await fs.mkdir(clipsDir, { recursive: true });
+    const clipPaths = [];
+    try {
+      for (let i = 0; i < stills.length; i++) {
+        const clipPath = path.join(clipsDir, `clip_${String(i).padStart(3, '0')}.mp4`);
+        const fadeOutStart = Math.max(0, perSlide - fade).toFixed(2);
+        const vf = `fade=t=in:st=0:d=${fade},fade=t=out:st=${fadeOutStart}:d=${fade},format=yuv420p`;
+        await runFFmpeg(['-y', '-loop', '1', '-t', perSlide.toFixed(2), '-framerate', '30', '-i', stills[i], '-vf', vf, '-c:v', 'libx264', '-r', '30', clipPath]);
+        clipPaths.push(clipPath);
+      }
+
+      const listPath = path.join(clipsDir, 'concat.txt');
+      const listContent = clipPaths.map((p) => `file '${p.replace(/'/g, "'\\''")}'`).join('\n');
+      await fs.writeFile(listPath, listContent);
+
+      await runFFmpeg(['-y', '-f', 'concat', '-safe', '0', '-i', listPath, '-c', 'copy', videoPath]);
+    } finally {
+      await fs.rm(clipsDir, { recursive: true, force: true }).catch(() => {});
     }
-    filters.push(`${prev}format=yuv420p[vfinal]`);
 
-    args.push(
-      '-filter_complex', filters.join(';'),
-      '-map', '[vfinal]',
-      '-c:v', 'libx264',
-      '-r', '30',
-      videoPath
-    );
-
-    await runFFmpeg(args);
     return videoPath;
   }
 
