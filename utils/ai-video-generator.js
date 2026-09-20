@@ -541,7 +541,7 @@ class AIVideoGenerator {
     }
 
     if (stills.length === 1) {
-      args.push('-vf', 'format=yuv420p', '-c:v', 'libx264', videoPath);
+      args.push('-vf', 'format=yuv420p', '-c:v', 'libx264', '-threads', '2', videoPath);
       await runFFmpeg(args);
       return videoPath;
     }
@@ -559,7 +559,7 @@ class AIVideoGenerator {
         const clipPath = path.join(clipsDir, `clip_${String(i).padStart(3, '0')}.mp4`);
         const fadeOutStart = Math.max(0, perSlide - fade).toFixed(2);
         const vf = `fade=t=in:st=0:d=${fade},fade=t=out:st=${fadeOutStart}:d=${fade},format=yuv420p`;
-        await runFFmpeg(['-y', '-loop', '1', '-t', perSlide.toFixed(2), '-framerate', '30', '-i', stills[i], '-vf', vf, '-c:v', 'libx264', '-r', '30', clipPath]);
+        await runFFmpeg(['-y', '-loop', '1', '-t', perSlide.toFixed(2), '-framerate', '30', '-i', stills[i], '-vf', vf, '-c:v', 'libx264', '-r', '30', '-threads', '2', clipPath]);
         clipPaths.push(clipPath);
       }
 
