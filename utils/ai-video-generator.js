@@ -542,7 +542,12 @@ class AIVideoGenerator {
 
     if (stills.length === 1) {
       args.push('-vf', 'format=yuv420p', '-c:v', 'libx264', '-threads', '2', videoPath);
-      await runFFmpeg(args);
+      try {
+        await runFFmpeg(args);
+      } catch (err) {
+        err.message = `${err.message} [signal=${err.signal} code=${err.code} killed=${err.killed}]`;
+        throw err;
+      }
       return videoPath;
     }
 
@@ -559,7 +564,12 @@ class AIVideoGenerator {
         const clipPath = path.join(clipsDir, `clip_${String(i).padStart(3, '0')}.mp4`);
         const fadeOutStart = Math.max(0, perSlide - fade).toFixed(2);
         const vf = `fade=t=in:st=0:d=${fade},fade=t=out:st=${fadeOutStart}:d=${fade},format=yuv420p`;
-        await runFFmpeg(['-y', '-loop', '1', '-t', perSlide.toFixed(2), '-framerate', '30', '-i', stills[i], '-vf', vf, '-c:v', 'libx264', '-r', '30', '-threads', '2', clipPath]);
+        try {
+          await runFFmpeg(['-y', '-loop', '1', '-t', perSlide.toFixed(2), '-framerate', '30', '-i', stills[i], '-vf', vf, '-c:v', 'libx264', '-r', '30', '-threads', '2', clipPath]);
+        } catch (err) {
+          err.message = `${err.message} [signal=${err.signal} code=${err.code} killed=${err.killed}]`;
+          throw err;
+        }
         clipPaths.push(clipPath);
       }
 
@@ -567,7 +577,12 @@ class AIVideoGenerator {
       const listContent = clipPaths.map((p) => `file '${p.replace(/'/g, "'\\''")}'`).join('\n');
       await fs.writeFile(listPath, listContent);
 
-      await runFFmpeg(['-y', '-f', 'concat', '-safe', '0', '-i', listPath, '-c', 'copy', videoPath]);
+      try {
+        await runFFmpeg(['-y', '-f', 'concat', '-safe', '0', '-i', listPath, '-c', 'copy', videoPath]);
+      } catch (err) {
+        err.message = `${err.message} [signal=${err.signal} code=${err.code} killed=${err.killed}]`;
+        throw err;
+      }
     } finally {
       await fs.rm(clipsDir, { recursive: true, force: true }).catch(() => {});
     }
