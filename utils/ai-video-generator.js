@@ -541,7 +541,12 @@ class AIVideoGenerator {
     }
 
     if (stills.length === 1) {
-      args.push('-vf', 'format=yuv420p', '-c:v', 'libx264', '-threads', '2', videoPath);
+      // Diagnostic logging confirmed ffmpeg was dying with signal=SIGKILL
+      // (an external/OOM kill, not a Node timeout or a thread-count problem)
+      // on this Railway plan's 1GB memory ceiling. Downscaling to 720p and
+      // using a lighter x264 preset/lookahead cuts peak encoder memory well
+      // below what a full 1080p encode with default lookahead needs.
+      args.push('-vf', 'scale=1280:720,format=yuv420p', '-c:v', 'libx264', '-threads', '2', '-preset', 'ultrafast', '-x264-params', 'rc-lookahead=10:mbtree=0', videoPath);
       try {
         await runFFmpeg(args);
       } catch (err) {
@@ -563,9 +568,11 @@ class AIVideoGenerator {
       for (let i = 0; i < stills.length; i++) {
         const clipPath = path.join(clipsDir, `clip_${String(i).padStart(3, '0')}.mp4`);
         const fadeOutStart = Math.max(0, perSlide - fade).toFixed(2);
-        const vf = `fade=t=in:st=0:d=${fade},fade=t=out:st=${fadeOutStart}:d=${fade},format=yuv420p`;
+        // Same SIGKILL/OOM finding as the single-slide branch above: scale
+        // down and lighten the encoder settings to keep peak memory low.
+        const vf = `scale=1280:720,fade=t=in:st=0:d=${fade},fade=t=out:st=${fadeOutStart}:d=${fade},format=yuv420p`;
         try {
-          await runFFmpeg(['-y', '-loop', '1', '-t', perSlide.toFixed(2), '-framerate', '30', '-i', stills[i], '-vf', vf, '-c:v', 'libx264', '-r', '30', '-threads', '2', clipPath]);
+          await runFFmpeg(['-y', '-loop', '1', '-t', perSlide.toFixed(2), '-framerate', '30', '-i', stills[i], '-vf', vf, '-c:v', 'libx264', '-r', '30', '-threads', '2', '-preset', 'ultrafast', '-x264-params', 'rc-lookahead=10:mbtree=0', clipPath]);
         } catch (err) {
           err.message = `${err.message} [signal=${err.signal} code=${err.code} killed=${err.killed}]`;
           throw err;
