@@ -506,6 +506,13 @@ class AIVideoGenerator {
         stills.push(stillPath);
       }
 
+      // Close the browser before encoding: Chromium can hold 200-400MB+ in
+      // memory, and keeping it open during ffmpeg encoding was pushing the
+      // container over its memory limit, getting the ffmpeg process
+      // OOM-killed with no usable error output. All screenshots are already
+      // captured, so the browser isn't needed for the rest of this function.
+      await browser.close().catch(() => {});
+
       const videoPath = outputPath.replace('.mp4', '_visual.mp4');
       const duration = this.calculateScriptDuration(script);
       await this.renderSlidesToVideo(stills, duration, videoPath);
